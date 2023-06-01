@@ -1,0 +1,77 @@
+contract Crowdfunding {
+    struct CampaignData {
+        address recipient;
+        uint contributed;
+        uint goal;
+        uint deadline;
+        uint num_contributions;
+        mapping(uint => Contribution) contributions;
+    }
+
+    struct Contribution {
+        address contributor;
+        uint amount;
+    }
+
+    uint nextCampaignId;
+    mapping(uint256 => CampaignData) campaigns;
+
+    // Start a new campaign.
+    function start(address recipient, uint256 goal, uint256 deadline) returns (uint id) {
+        var campaign = campaigns[nextCampaignId];
+        campaign.recipient = recipient;
+        campaign.goal = goal;
+        campaign.deadline = deadline;
+        nextCampaignId ++;
+        id = nextCampaignId;
+    }
+
+    // Contribute to the campaign with id $(campaignId).
+    function contribute(uint256 campaignId) {
+        var campaign = campaigns[campaignId];
+        if (campaign.deadline == 0) // check for non-existing campaign
+            return;
+        campaign.contributed += msg.value;
+        var contribution = campaign.contributions[campaign.num_contributions];
+        contribution.contributor = msg.sender;
+        contribution.amount = msg.value;
+        campaign.num_contributions++;
+    }
+
+    // Check whether the funding goal of the campaign with id $(campaignId)
+    // has been reached and transfer the money.
+    function checkGoalReached(uint256 campaignId) returns (bool reached) {
+        var campaign = campaigns[campaignId];
+        if (campaign.deadline > 0 && campaign.contributed >= campaign.goal) {
+            campaign.recipient.send(campaign.contributed);
+            // clear storage, we have to do it explicitly for the mapping since
+            // it is not possible to enumerate all set keys.
+            for (uint i = 0; i < campaign.num_contributions; ++i)
+                delete campaign.contributions[i]; // zero out its members
+            reached = true;
+        }
+    }
+
+    // Check whether the deadline of the campaign with id $(campaignId) has
+    // passed. In that case, return the contributed money and delete the
+    // campaign.
+    function checkExpired(uint campaignId) returns (bool expired) {
+        expired = false;
+        var campaign = campaigns[campaignId];
+        if (campaign.deadline > 0 && block.timestamp > campaign.deadline) {
+            // pay out the contributors
+            for (uint i = 0; i < campaign.num_contributions; ++i) {
+                campaign.contributions[i].contributor.send(
+                    campaign.contributions[i].amount);
+                delete campaign.contributions[i];
+            }
+            expired = true;
+        }
+    }
+
+    // Return the amount contributed to the campaign with id $(campaignId) by
+    // the sender of the transaction.
+    function getContributedAmount(uint campaignId) returns (uint amount) {
+        amount = campaigns[campaignId].contributed;
+    }
+}
